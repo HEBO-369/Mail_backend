@@ -1,15 +1,18 @@
 package eg.edu.alexu.cse.mail_server.Controller;
 
 
+import java.util.Map;
+
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import eg.edu.alexu.cse.mail_server.Service.MailService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/folder")
-@CrossOrigin(origins = "http://localhost:4200")
 @RequiredArgsConstructor
 public class FolderController {
 
