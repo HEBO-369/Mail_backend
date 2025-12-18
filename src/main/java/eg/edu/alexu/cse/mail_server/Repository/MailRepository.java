@@ -29,6 +29,10 @@ public interface MailRepository extends JpaRepository<Mail, Long> {
     @Query("SELECT m FROM Mail m WHERE m.receiver = :email OR m.sender = :email ORDER BY m.timestamp DESC")
     List<Mail> findByReceiverOrSenderOrderByTimestampDesc(@Param("email") String email1, @Param("email") String email2);
 
+    // Find all emails for a user (sender or receiver) excluding drafts and trash
+    @Query("SELECT m FROM Mail m WHERE (m.receiver = :email OR m.sender = :email) AND UPPER(m.folderName) NOT IN ('DRAFTS', 'TRASH') ORDER BY m.timestamp DESC")
+    List<Mail> findByReceiverOrSenderExcludingDraftsAndTrashOrderByTimestampDesc(@Param("email") String email);
+
     // Find trash emails older than specified date for automatic deletion
     List<Mail> findByFolderNameAndDeletedAtBefore(String folderName, java.time.LocalDateTime deletedAt);
 

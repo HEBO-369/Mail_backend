@@ -52,6 +52,12 @@ public class User {
     )
     private List<Contact> contacts;
 
+    // Custom folders for this user
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_folders", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "folder_name")
+    private List<String> folders = new ArrayList<>();
+
     public Long getUserId() {
         return userId;
     }

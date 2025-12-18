@@ -37,9 +37,12 @@ public class MailController {
     }
 
     @PostMapping("/draft")
-    public Map<String, String> draftEmail(@RequestBody ComposeEmailDTO composeEmailDTO) {
-        mailService.draft(composeEmailDTO);
-        return Map.of("message", "Email drafted successfully");
+    public Map<String, Object> draftEmail(@RequestBody ComposeEmailDTO composeEmailDTO) {
+        Long draftId = mailService.draft(composeEmailDTO);
+        return Map.of(
+            "message", "Email drafted successfully",
+            "draftId", draftId
+        );
     }
 
     // Get inbox emails
@@ -102,6 +105,58 @@ public class MailController {
     public Map<String, String> deleteMail(@PathVariable Long mailId) {
         mailService.deleteMail(mailId);
         return Map.of("message", "Mail deleted successfully");
+    }
+
+    // Permanent delete (hard delete from database)
+    @DeleteMapping("/{mailId}/permanent")
+    public Map<String, String> permanentDeleteMail(@PathVariable Long mailId) {
+        mailService.permanentDeleteMail(mailId);
+        return Map.of("message", "Mail permanently deleted");
+    }
+
+    // ==================== CUSTOM FOLDERS ENDPOINTS ====================
+    
+    @GetMapping("/folders/{userEmail}")
+    public List<String> getUserFolders(@PathVariable String userEmail) {
+        return mailService.getUserFolders(userEmail);
+    }
+
+    @PostMapping("/folders/{userEmail}")
+    public Map<String, String> createFolder(
+            @PathVariable String userEmail,
+            @org.springframework.web.bind.annotation.RequestParam String folderName
+    ) {
+        mailService.createUserFolder(userEmail, folderName);
+        return Map.of("message", "Folder created successfully");
+    }
+
+    @DeleteMapping("/folders/{userEmail}")
+    public Map<String, String> deleteFolder(
+            @PathVariable String userEmail,
+            @org.springframework.web.bind.annotation.RequestParam String folderName
+    ) {
+        mailService.deleteUserFolder(userEmail, folderName);
+        return Map.of("message", "Folder deleted successfully");
+    }
+
+    @PutMapping("/folders/{userEmail}")
+    public Map<String, String> renameFolder(
+            @PathVariable String userEmail,
+            @org.springframework.web.bind.annotation.RequestParam String oldName,
+            @org.springframework.web.bind.annotation.RequestParam String newName
+    ) {
+        mailService.renameUserFolder(userEmail, oldName, newName);
+        return Map.of("message", "Folder renamed successfully");
+    }
+
+    // Update existing draft
+    @PutMapping("/draft/{draftId}")
+    public Map<String, String> updateDraft(
+            @PathVariable Long draftId,
+            @RequestBody ComposeEmailDTO composeEmailDTO
+    ) {
+        mailService.updateDraft(draftId, composeEmailDTO);
+        return Map.of("message", "Draft updated successfully");
     }
 
 }

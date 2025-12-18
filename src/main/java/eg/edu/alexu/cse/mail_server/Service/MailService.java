@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -11,7 +12,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import eg.edu.alexu.cse.mail_server.Entity.Attachment;
 import eg.edu.alexu.cse.mail_server.Entity.Mail;
-import eg.edu.alexu.cse.mail_server.Entity.User;
 import eg.edu.alexu.cse.mail_server.Repository.MailRepository;
 import eg.edu.alexu.cse.mail_server.Service.command.DraftCommand;
 import eg.edu.alexu.cse.mail_server.Service.command.GetMailCommand;
@@ -45,8 +45,8 @@ public class MailService {
         sendCommand.executeWithAttachments(composeEmailDTO, attachments);
     }
 
-    public void draft(ComposeEmailDTO composeEmailDTO) {
-        draftCommand.execute(composeEmailDTO);
+    public Long draft(ComposeEmailDTO composeEmailDTO) {
+        return draftCommand.execute(composeEmailDTO);
     }
 
     // Get inbox mails
@@ -93,7 +93,8 @@ public class MailService {
 
         List<Mail> mails;
         if ("all".equalsIgnoreCase(folderName)) {
-            mails = mailRepository.findByReceiverOrSenderOrderByTimestampDesc(userEmail, userEmail);
+            // All Mail shows only inbox and sent (excludes drafts and trash)
+            mails = mailRepository.findByReceiverOrSenderExcludingDraftsAndTrashOrderByTimestampDesc(userEmail);
         } else {
             // Use ownerId to load mails for the given folder (including "trash")
             mails = mailRepository.findByOwnerIdAndFolderNameOrderByTimestampDesc(userId, folderName);
@@ -141,16 +142,31 @@ public class MailService {
     }
 
     /**
-     * Permanently delete emails that have been in trash for more than 30 days
+     * Permanently delete an email from database (hard delete)
+     * This completely removes the email and cannot be undone
+     * @param mailId ID of the email to permanently delete
+     */
+    public void permanentDeleteMail(Long mailId) {
+        Mail mail = getMailById(mailId);
+        mailRepository.delete(mail);
+    }
+
+    /**
+     * Permanently delete emails that have been in trash for more than 1 minute
      * Called by scheduled task
+     * TO CHANGE AUTO-DELETE TIME: Change .minusMinutes(1) to:
+     * - .minusMinutes(5) for 5 minutes
+     * - .minusHours(1) for 1 hour
+     * - .minusDays(7) for 7 days
+     * - .minusDays(30) for 30 days
      */
     public void deleteOldTrashEmails() {
-        java.time.LocalDateTime thirtyDaysAgo = java.time.LocalDateTime.now().minusDays(30);
-        List<Mail> oldTrashMails = mailRepository.findByFolderNameAndDeletedAtBefore("trash", thirtyDaysAgo);
+        java.time.LocalDateTime oneMinuteAgo = java.time.LocalDateTime.now().minusMinutes(1);
+        List<Mail> oldTrashMails = mailRepository.findByFolderNameAndDeletedAtBefore("trash", oneMinuteAgo);
 
         if (!oldTrashMails.isEmpty()) {
             mailRepository.deleteAll(oldTrashMails);
-            System.out.println("Deleted " + oldTrashMails.size() + " old emails from trash");
+            System.out.println("Auto-deleted " + oldTrashMails.size() + " emails from trash (older than 1 minute)");
         }
     }
 
@@ -258,34 +274,210 @@ public class MailService {
     }
 
     public List<Mail> getSortedMails(String email, String critera, boolean order){
+
+        List<Mail> mailList = mailRepository.findByReceiverAndFolderNameOrderBySenderAsc(email, "INBOX");
+        
         switch(critera){
             case "sender":
-                if(order)
-                   return mailRepository.findByReceiverAndFolderNameOrderBySenderAsc(email, "INBOX");
-                else
-                    return mailRepository.findByReceiverAndFolderNameOrderBySenderDesc(email, "INBOX"); 
+                if(order){
+                   PriorityQueue<Mail> mailQueue = new PriorityQueue<Mail>(mailList.size(), 
+                            ((a, b) -> a.getSender().toLowerCase().compareTo(b.getSender().toLowerCase()))
+                   );
+                   mailQueue.addAll(mailList);
+                   mailList.clear();
+                   while (!mailQueue.isEmpty())
+                        mailList.add(mailQueue.poll());
+                    return mailList;
+                   //return mailRepository.findByReceiverAndFolderNameOrderBySenderAsc(email, "INBOX"); 
+                }
+                else{
+                    PriorityQueue<Mail> mailQueue = new PriorityQueue<Mail>(mailList.size(), 
+                                ((a, b) -> b.getSender().toLowerCase().compareTo(a.getSender().toLowerCase()))
+                    );
+                    mailQueue.addAll(mailList);
+                    mailList.clear();
+                    while (!mailQueue.isEmpty())
+                            mailList.add(mailQueue.poll());
+                    return mailList;
+                    //return mailRepository.findByReceiverAndFolderNameOrderBySenderDesc(email, "INBOX");
+                }
+                     
                 
             case "subject":
-                if(order)
-                   return mailRepository.findByReceiverAndFolderNameOrderBySubjectAsc(email, "INBOX");
-                else
-                    return mailRepository.findByReceiverAndFolderNameOrderBySubjectDesc(email, "INBOX"); 
+                if(order){
+                    PriorityQueue<Mail> mailQueue = new PriorityQueue<Mail>(mailList.size(), 
+                            ((a, b) -> a.getSubject().toLowerCase().compareTo(b.getSubject().toLowerCase()))
+                   );
+                   mailQueue.addAll(mailList);
+                   mailList.clear();
+                   while (!mailQueue.isEmpty())
+                        mailList.add(mailQueue.poll());
+                    return mailList;
+                    //return mailRepository.findByReceiverAndFolderNameOrderBySubjectAsc(email, "INBOX");
+                }
+ 
+                else{
+                    PriorityQueue<Mail> mailQueue = new PriorityQueue<Mail>(mailList.size(), 
+                                ((a, b) -> b.getSubject().toLowerCase().compareTo(a.getSubject().toLowerCase()))
+                    );
+                    mailQueue.addAll(mailList);
+                    mailList.clear();
+                    while (!mailQueue.isEmpty())
+                            mailList.add(mailQueue.poll());
+                    return mailList;
+                    //return mailRepository.findByReceiverAndFolderNameOrderBySubjectDesc(email, "INBOX"); 
+                }
+                    
 
             case "date":
-                if(order)
-                   return mailRepository.findByReceiverAndFolderNameOrderByTimestampAsc(email, "INBOX");
-                else
-                    return mailRepository.findByReceiverAndFolderNameOrderByTimestampDesc(email, "INBOX"); 
+                if(order){
+                    PriorityQueue<Mail> mailQueue = new PriorityQueue<Mail>(mailList.size(), 
+                            ((a, b) -> a.getTimestamp().compareTo(b.getTimestamp()))
+                    );
+                    mailQueue.addAll(mailList);
+                    mailList.clear();
+                    while (!mailQueue.isEmpty())
+                            mailList.add(mailQueue.poll());
+                        return mailList;
+                    //return mailRepository.findByReceiverAndFolderNameOrderByTimestampAsc(email, "INBOX");
+                }
+                else{
+                    PriorityQueue<Mail> mailQueue = new PriorityQueue<Mail>(mailList.size(), 
+                                ((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
+                    );
+                    mailQueue.addAll(mailList);
+                    mailList.clear();
+                    while (!mailQueue.isEmpty())
+                            mailList.add(mailQueue.poll());
+                    return mailList;
+                    //return mailRepository.findByReceiverAndFolderNameOrderByTimestampDesc(email, "INBOX"); 
+                }
 
             case "priority":
-                if(order)
-                   return mailRepository.findByReceiverAndFolderNameOrderByPriorityAsc(email, "INBOX");
-                else
-                    return mailRepository.findByReceiverAndFolderNameOrderByPriorityDesc(email, "INBOX");
+                if(order){
+                    // Priority Mode ON: Show HIGH priority (5) first, then lower priorities
+                    PriorityQueue<Mail> mailQueue = new PriorityQueue<Mail>(mailList.size(), 
+                                ((a, b) -> Integer.valueOf(b.getPriority()).compareTo(Integer.valueOf(a.getPriority())))
+                    );
+                    mailQueue.addAll(mailList);
+                    mailList.clear();
+                    while (!mailQueue.isEmpty())
+                            mailList.add(mailQueue.poll());
+                    return mailList;
+                    //return mailRepository.findByReceiverAndFolderNameOrderByPriorityDesc(email, "INBOX");
+                }
+                   
+                else{
+                    // Priority Mode OFF: Show LOW priority (1) first
+                    PriorityQueue<Mail> mailQueue = new PriorityQueue<Mail>(mailList.size(), 
+                            ((a, b) -> Integer.valueOf(a.getPriority()).compareTo(Integer.valueOf(b.getPriority())))
+                    );
+                    mailQueue.addAll(mailList);
+                    mailList.clear();
+                    while (!mailQueue.isEmpty())
+                            mailList.add(mailQueue.poll());
+                    return mailList;
+                    //return mailRepository.findByReceiverAndFolderNameOrderByPriorityAsc(email, "INBOX");
+                }
+                    
 
             default:
                 return mailRepository.findByReceiver(email);
         }
+    }
+
+    // ==================== CUSTOM FOLDERS MANAGEMENT ====================
+
+    public List<String> getUserFolders(String userEmail) {
+        eg.edu.alexu.cse.mail_server.Entity.User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userEmail));
+        return user.getFolders() != null ? new ArrayList<>(user.getFolders()) : new ArrayList<>();
+    }
+
+    public void createUserFolder(String userEmail, String folderName) {
+        eg.edu.alexu.cse.mail_server.Entity.User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userEmail));
+        
+        if (user.getFolders() == null) {
+            user.setFolders(new ArrayList<>());
+        }
+        
+        if (user.getFolders().contains(folderName)) {
+            throw new IllegalArgumentException("Folder already exists: " + folderName);
+        }
+        
+        user.getFolders().add(folderName);
+        userRepository.save(user);
+    }
+
+    public void deleteUserFolder(String userEmail, String folderName) {
+        eg.edu.alexu.cse.mail_server.Entity.User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userEmail));
+        
+        if (user.getFolders() != null) {
+            user.getFolders().remove(folderName);
+            userRepository.save(user);
+        }
+        
+        // Delete all emails in this folder
+        Long userId = user.getUserId();
+        List<Mail> folderMails = mailRepository.findByOwnerIdAndFolderNameOrderByTimestampDesc(userId, folderName);
+        if (!folderMails.isEmpty()) {
+            mailRepository.deleteAll(folderMails);
+        }
+    }
+
+    public void renameUserFolder(String userEmail, String oldName, String newName) {
+        eg.edu.alexu.cse.mail_server.Entity.User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userEmail));
+        
+        if (user.getFolders() == null || !user.getFolders().contains(oldName)) {
+            throw new IllegalArgumentException("Folder not found: " + oldName);
+        }
+        
+        if (user.getFolders().contains(newName)) {
+            throw new IllegalArgumentException("Folder already exists: " + newName);
+        }
+        
+        // Update folder list
+        user.getFolders().remove(oldName);
+        user.getFolders().add(newName);
+        userRepository.save(user);
+        
+        // Update all emails in this folder
+        Long userId = user.getUserId();
+        List<Mail> folderMails = mailRepository.findByOwnerIdAndFolderNameOrderByTimestampDesc(userId, oldName);
+        for (Mail mail : folderMails) {
+            mail.setFolderName(newName);
+        }
+        if (!folderMails.isEmpty()) {
+            mailRepository.saveAll(folderMails);
+        }
+    }
+
+    // ==================== UPDATE DRAFT ====================
+
+    /**
+     * Update an existing draft email
+     * @param draftId ID of the draft to update
+     * @param dto Updated email data
+     */
+    public void updateDraft(Long draftId, ComposeEmailDTO dto) {
+        Mail existingDraft = getMailById(draftId);
+        
+        // Verify it's actually a draft
+        if (!"DRAFTS".equalsIgnoreCase(existingDraft.getFolderName())) {
+            throw new IllegalArgumentException("Email is not a draft");
+        }
+        
+        // Update draft fields
+        existingDraft.setReceiver(String.join(", ", dto.getReceivers()));
+        existingDraft.setSubject(dto.getSubject());
+        existingDraft.setBody(dto.getBody());
+        existingDraft.setPriority(dto.getPriority());
+        existingDraft.setTimestamp(java.time.LocalDateTime.now());
+        
+        mailRepository.save(existingDraft);
     }
 
 }
