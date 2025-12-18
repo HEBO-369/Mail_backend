@@ -94,7 +94,7 @@ public class MailService {
         List<Mail> mails;
         if ("all".equalsIgnoreCase(folderName)) {
             // All Mail shows only inbox and sent (excludes drafts and trash)
-            mails = mailRepository.findByReceiverOrSenderExcludingDraftsAndTrashOrderByTimestampDesc(userEmail);
+            mails = mailRepository.findAllByOwnerIdExcludingDraftsAndTrash(userId);
         } else {
             // Use ownerId to load mails for the given folder (including "trash")
             mails = mailRepository.findByOwnerIdAndFolderNameOrderByTimestampDesc(userId, folderName);
