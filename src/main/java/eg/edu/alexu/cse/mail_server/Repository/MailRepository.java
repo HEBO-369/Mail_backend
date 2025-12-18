@@ -60,4 +60,7 @@ public interface MailRepository extends JpaRepository<Mail, Long> {
     // Find mail by ID and owner (for deletion security)
     @Query("SELECT m FROM Mail m WHERE m.mailId = :mailId AND m.ownerId = :ownerId")
     Mail findByMailIdAndOwnerId(@Param("mailId") Long mailId, @Param("ownerId") Long ownerId);
+        @Query("SELECT m FROM Mail m WHERE m.ownerId = :ownerId AND UPPER(m.folderName) NOT IN ('DRAFTS', 'TRASH') ORDER BY m.timestamp DESC")
+    List<Mail> findAllByOwnerIdExcludingDraftsAndTrash(@Param("ownerId") Long ownerId);
+}
 }
